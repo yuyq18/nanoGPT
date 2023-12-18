@@ -1,3 +1,8 @@
+# Note
+
+A repository for training & fine-tuning a GPT model on a lyrics corpus.
+
+----
 
 # nanoGPT
 
