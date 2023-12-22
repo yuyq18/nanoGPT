@@ -11,3 +11,4 @@ __pycache__/
 
 out*
 *.jsonl
+wandb/

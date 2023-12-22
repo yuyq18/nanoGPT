@@ -241,6 +241,7 @@ def get_lr(it):
 # logging
 if wandb_log and master_process:
     import wandb
+    wandb.login(key="79614754350ba92f82c0502f5e8c9625676cf1b9")
     wandb.init(project=wandb_project, name=wandb_run_name, config=config)
 
 # training loop
