@@ -6,6 +6,7 @@ from contextlib import nullcontext
 import torch
 from model import GPTConfig, GPT
 import numpy as np
+from tqdm import trange
 
 # -----------------------------------------------------------------------------
 init_from = 'resume' # either 'resume' (from an out_dir) or a gpt2 variant (e.g. 'gpt2-xl')
@@ -58,24 +59,32 @@ if compile:
 data_dir = os.path.join('data', dataset)
 test_data = np.memmap(os.path.join(data_dir, 'test.bin'), dtype=np.uint16, mode='r')
 test_data = torch.stack([torch.from_numpy(test_data.astype(np.int64))])
+if device_type == 'cuda':
+    # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
+    test_data = test_data.pin_memory().to(device, non_blocking=True)
+else:
+    test_data = test_data.to(device)
 
 # calculate ppl
 nlls = []
 prev_end_loc = 0
 
 max_length = block_size
-seq_len = len(test_data)
+seq_len = len(test_data[0])-1
 
-for begin_loc in range(0, seq_len, stride):
+print(f'evaluating {seq_len} tokens in stride={stride} chunks of {max_length}...')
+
+for begin_loc in trange(0, seq_len, stride):
     end_loc = min(begin_loc + max_length, seq_len)
     trg_len = end_loc - prev_end_loc  # may be different from stride on last loop
-    input_ids = test_data[:, begin_loc:end_loc].to(device)
-    target_ids = input_ids.clone()
-    target_ids[:, :-trg_len] = -100
+    input_ids = test_data[:, begin_loc:end_loc]
+    
+    target_ids = test_data.clone()[:, begin_loc+1:end_loc+1]
+    target_ids[:, :-trg_len] = -1
 
     with torch.no_grad():
         with ctx:
-            logits, loss = model(input_ids, target_ids)
+            logits, loss = model(input_ids, targets=target_ids)
     nlls.append(loss)
 
     prev_end_loc = end_loc

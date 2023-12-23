@@ -11,4 +11,6 @@ __pycache__/
 
 out*
 *.jsonl
+*.model
+*.vocab
 wandb/

@@ -7,10 +7,13 @@ from contextlib import nullcontext
 import torch
 import tiktoken
 from model import GPTConfig, GPT
+import sentencepiece as spm
 
 # -----------------------------------------------------------------------------
 init_from = 'resume' # either 'resume' (from an out_dir) or a gpt2 variant (e.g. 'gpt2-xl')
 out_dir = 'out' # ignored if init_from is not 'resume'
+tokenizer = 'bpe'
+vocab_size = 30000
 start = "\n" # or "<|endoftext|>" or etc. Can also specify a file, use as: "FILE:prompt.txt"
 num_samples = 10 # number of samples to draw
 max_new_tokens = 500 # number of tokens generated in each sample
@@ -66,6 +69,12 @@ if load_meta:
     stoi, itos = meta['stoi'], meta['itos']
     encode = lambda s: [stoi[c] for c in s]
     decode = lambda l: ''.join([itos[i] for i in l])
+elif tokenizer.startswith('bpe') or tokenizer.startswith('unigram'):
+    # use the sentencepiece tokenizer
+    tokendizer_path = os.path.join('data', checkpoint['config']['dataset'], 'tokenizers/{}/vocab_{}.model'.format(tokenizer, vocab_size))
+    sp = spm.SentencePieceProcessor(model_file=tokendizer_path)
+    encode = lambda s: sp.encode(s, out_type=int)
+    decode = lambda l: sp.decode(l)
 else:
     # ok let's assume gpt-2 encodings by default
     print("No meta.pkl found, assuming GPT-2 encodings...")
