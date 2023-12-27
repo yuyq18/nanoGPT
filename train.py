@@ -29,6 +29,9 @@ from torch.distributed import init_process_group, destroy_process_group
 
 from model import GPTConfig, GPT
 
+WANDB_API_KEY = '79614754350ba92f82c0502f5e8c9625676cf1b9'
+os.environ["WANDB_API_KEY"] = WANDB_API_KEY
+
 # -----------------------------------------------------------------------------
 # default config values designed to train a gpt2 (124M) on OpenWebText
 # I/O
@@ -155,7 +158,7 @@ if init_from == 'scratch':
 elif init_from == 'resume':
     print(f"Resuming training from {out_dir}")
     # resume training from a checkpoint.
-    ckpt_path = os.path.join(out_dir, 'ckpt.pt')
+    ckpt_path = os.path.join(out_dir, wandb_run_name+'_ckpt.pt')
     checkpoint = torch.load(ckpt_path, map_location=device)
     checkpoint_model_args = checkpoint['model_args']
     # force these config attributes to be equal otherwise we can't even resume training
@@ -241,7 +244,7 @@ def get_lr(it):
 # logging
 if wandb_log and master_process:
     import wandb
-    wandb.login(key="79614754350ba92f82c0502f5e8c9625676cf1b9")
+    wandb.login(key=WANDB_API_KEY)
     wandb.init(project=wandb_project, name=wandb_run_name, config=config)
 
 # training loop
@@ -281,7 +284,7 @@ while True:
                     'config': config,
                 }
                 print(f"saving checkpoint to {out_dir}")
-                torch.save(checkpoint, os.path.join(out_dir, 'ckpt.pt'))
+                torch.save(checkpoint, os.path.join(out_dir, wandb_run_name+'ckpt.pt'))
     if iter_num == 0 and eval_only:
         break
 

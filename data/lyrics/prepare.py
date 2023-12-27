@@ -1,6 +1,7 @@
 import os
 import json
 import numpy as np
+import pickle
 import sentencepiece as spm
 
 # preprocess data
@@ -53,7 +54,7 @@ def train(model_type, vocab_size, data_type=""):
 # Train
 model_type = 'unigram'
 vocab_size = 30000
-train(model_type, vocab_size)
+# train(model_type, vocab_size)
 
 # encode
 tokendizer_path = os.path.join(os.path.dirname(__file__), 'tokenizers/{}/vocab_{}.model'.format(model_type, vocab_size))
@@ -74,3 +75,10 @@ test_ids = np.array(test_ids, dtype=np.uint16)
 train_ids.tofile(os.path.join(os.path.dirname(__file__), 'train.bin'))
 val_ids.tofile(os.path.join(os.path.dirname(__file__), 'val.bin'))
 test_ids.tofile(os.path.join(os.path.dirname(__file__), 'test.bin'))
+
+# save the meta information as well, to help us encode/decode later
+meta = {
+    'vocab_size': vocab_size,
+}
+with open(os.path.join(os.path.dirname(__file__), 'meta.pkl'), 'wb') as f:
+    pickle.dump(meta, f)

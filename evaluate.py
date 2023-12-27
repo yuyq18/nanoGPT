@@ -10,7 +10,8 @@ from tqdm import trange
 
 # -----------------------------------------------------------------------------
 init_from = 'resume' # either 'resume' (from an out_dir) or a gpt2 variant (e.g. 'gpt2-xl')
-out_dir = 'out-lyrics-char' # ignored if init_from is not 'resume'
+out_dir = 'out-lyrics' # ignored if init_from is not 'resume'
+wandb_run_name = 'unigram-30000'
 
 dataset = 'lyrics_char'
 batch_size = 64
@@ -35,7 +36,7 @@ ctx = nullcontext() if device_type == 'cpu' else torch.autocast(device_type=devi
 # load model
 if init_from == 'resume':
     # init from a model saved in a specific directory
-    ckpt_path = os.path.join(out_dir, 'ckpt.pt')
+    ckpt_path = os.path.join(out_dir, wandb_run_name+'ckpt.pt')
     checkpoint = torch.load(ckpt_path, map_location=device)
     gptconf = GPTConfig(**checkpoint['model_args'])
     model = GPT(gptconf)

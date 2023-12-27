@@ -4,6 +4,7 @@ init_from = 'resume' # either 'resume' (from an out_dir) or a gpt2 variant (e.g.
 tokenizer = 'unigram'
 vocab_size = 30000
 out_dir = 'out-lyrics' # ignored if init_from is not 'resume'
+wandb_run_name = 'unigram-30000'
 start = "FILE:data/lyrics_char/my_lyrics.txt" # or "<|endoftext|>" or etc. Can also specify a file, use as: "FILE:prompt.txt"
 num_samples = 2 # number of samples to draw
 temperature = 0.8 # 1.0 = no change, < 1.0 = less random, > 1.0 = more random, in predictions
