@@ -29,9 +29,6 @@ from torch.distributed import init_process_group, destroy_process_group
 
 from model import GPTConfig, GPT
 
-WANDB_API_KEY = '79614754350ba92f82c0502f5e8c9625676cf1b9'
-os.environ["WANDB_API_KEY"] = WANDB_API_KEY
-
 # -----------------------------------------------------------------------------
 # default config values designed to train a gpt2 (124M) on OpenWebText
 # I/O
@@ -186,6 +183,82 @@ elif init_from.startswith('gpt2'):
     # read off the created config params, so we can store them into checkpoint correctly
     for k in ['n_layer', 'n_head', 'n_embd', 'block_size', 'bias', 'vocab_size']:
         model_args[k] = getattr(model.config, k)
+elif init_from.startswith('uer/gpt2'):
+    print(f"Initializing from OpenAI GPT-2 weights: {init_from}")
+    override_args = dict(dropout=dropout)
+    from transformers import GPT2LMHeadModel, BertTokenizer
+    print(f"Loading model from pretrained gpt: {init_from}")
+    import re
+    # 'uer/gpt2-{size}-chinese-cluecorpussmall' or 'uer/gpt2-chinese-cluecorpussmall'
+    # get gpt2-{size} and gpt2
+    # size = distil/medium/large/xlarge
+    size = re.findall(r'(gpt2-[a|b|d-z]+|gpt2)', init_from)[0]
+    config_args = {
+        'gpt2-distil':         dict(n_layer=6, n_head=12, n_embd=768),  # 124M params
+        'gpt2':                dict(n_layer=12, n_head=12, n_embd=768), # 124M params
+        'gpt2-medium':         dict(n_layer=24, n_head=16, n_embd=1024), # 355M params
+        'gpt2-large':          dict(n_layer=36, n_head=20, n_embd=1280), # 774M params
+        'gpt2-xlarge':         dict(n_layer=48, n_head=25, n_embd=1600), # 1558M params
+    }[size]
+    if meta_vocab_size is None:
+        print("meta_vocab_size is None, cannot determine vocab_size")
+        exit(1)
+    print("forcing vocab_size={meta_vocab_size}, block_size=1024, bias=True")
+    config_args.update(dict(vocab_size=meta_vocab_size, block_size=1024, bias=True))
+    if 'dropout' in override_args:
+        print(f"overriding dropout rate to {override_args['dropout']}")
+        config_args['dropout'] = override_args['dropout']
+    gptconf = GPTConfig(**config_args)
+    model = GPT(gptconf)
+    sd = model.state_dict()
+    sd_keys = sd.keys()
+    sd_keys = [k for k in sd_keys if not k.endswith('.attn.bias')]
+    
+    model_hf = GPT2LMHeadModel.from_pretrained(init_from)
+    sd_hf = model_hf.state_dict()
+    
+    sd_keys_hf = sd_hf.keys()
+    sd_keys_hf = [k for k in sd_keys_hf if not k.endswith('.attn.masked_bias')] # ignore these, just a buffer
+    sd_keys_hf = [k for k in sd_keys_hf if not k.endswith('.attn.bias')] # same, just the mask (buffer)
+    transposed = ['attn.c_attn.weight', 'attn.c_proj.weight', 'mlp.c_fc.weight', 'mlp.c_proj.weight']
+    # ignore the head and emb weights
+    ignored = [] if dataset.endswith('char') else ['transformer.wte.weight', 'lm_head.weight', 'lm_head.bias']
+    # basically the openai checkpoints use a "Conv1D" module, but we only want to use a vanilla Linear
+    # this means that we have to transpose these weights when we import them
+    assert len(sd_keys_hf) == len(sd_keys), f"mismatched keys: {len(sd_keys_hf)} != {len(sd_keys)}"
+    for k in sd_keys_hf:
+        if k in ignored:
+            continue
+        if any(k.endswith(w) for w in transposed):
+            # special treatment for the Conv1D weights we need to transpose
+            assert sd_hf[k].shape[::-1] == sd[k].shape
+            with torch.no_grad():
+                sd[k].copy_(sd_hf[k].t())
+        else:
+            # vanilla copy over the other parameters
+            assert sd_hf[k].shape == sd[k].shape
+            with torch.no_grad():
+                sd[k].copy_(sd_hf[k])
+    if not dataset.endswith('ft'):
+        with open(os.path.join(data_dir, 'tokenizers', 'unigram', 'vocab_30000.vocab'), 'r') as f:
+            vocab = f.readlines()
+            vocab = [line.strip().split('\t')[0] for line in vocab]
+            tokenizer = BertTokenizer.from_pretrained(init_from)
+            vocab_ids = tokenizer(vocab, add_special_tokens=False)['input_ids']
+            with torch.no_grad():
+                # compute the average embedding for each token in the vocab
+                # and then set the embedding table to be this average
+                vocab_embs = [sd_hf['transformer.wte.weight'][ids].mean(dim=0) for ids in vocab_ids]
+                vocab_embs = torch.stack(vocab_embs)
+                sd['transformer.wte.weight'] = vocab_embs
+                # initialize the final linear layer as well
+                vocab_lm_heads = [sd_hf['lm_head.weight'][ids].mean(dim=0) for ids in vocab_ids]
+                vocab_lm_heads = torch.stack(vocab_lm_heads)
+                sd['lm_head.weight'] = vocab_lm_heads
+    
+    # read off the created config params, so we can store them into checkpoint correctly
+    for k in ['n_layer', 'n_head', 'n_embd', 'block_size', 'bias', 'vocab_size']:
+        model_args[k] = getattr(model.config, k)
 # crop down the model block size if desired, using model surgery
 if block_size < model.config.block_size:
     model.crop_block_size(block_size)
@@ -244,7 +317,6 @@ def get_lr(it):
 # logging
 if wandb_log and master_process:
     import wandb
-    wandb.login(key=WANDB_API_KEY)
     wandb.init(project=wandb_project, name=wandb_run_name, config=config)
 
 # training loop

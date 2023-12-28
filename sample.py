@@ -76,6 +76,11 @@ elif tokenizer.startswith('bpe') or tokenizer.startswith('unigram'):
     sp = spm.SentencePieceProcessor(model_file=tokendizer_path)
     encode = lambda s: sp.encode(s, out_type=int)
     decode = lambda l: sp.decode(l)
+elif tokenizer.startswith('uer/gpt2'):
+    from transformers import BertTokenizer
+    tokenizer: BertTokenizer = BertTokenizer.from_pretrained(tokenizer)
+    encode = lambda s: tokenizer.encode(s)
+    decode = lambda l: tokenizer.decode(l, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 else:
     # ok let's assume gpt-2 encodings by default
     print("No meta.pkl found, assuming GPT-2 encodings...")
