@@ -4,7 +4,7 @@
 
 ## 0. 实验环境搭建
 
-在nanoGPT代码基础上，运行命令
+在 `nanoGPT` 代码基础上，运行命令
 
 ```shell
 python train.py config/train_shakespeare_char.py
